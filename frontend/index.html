@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <title>ChatRoom</title>
+        <link rel="stylesheet" href="style.css">
+        <script src="main.js" defer></script>
+    </head>
+    <body>
+        <dialog id="myPopup">
+        <form>
+        <label for="name">Entrez votre nom : </label>
+        <input name="name" id="name" type="text" onkeydown="handleKeyDown(event, 'identification')" required> <br>
+        <label for="userPassword">Entrez votre mot de passe : </label>
+        <input name="userPassword" id="userPassword" type="password" onkeydown="handleKeyDown(event, 'identification')" required>
+        </form>
+    </dialog>
+        <div id="chatContainer">
+            <div id="chat"></div>
+            <div id="inputArea">
+                <textarea id="messageInput" rows="4" cols="50" onkeydown="handleKeyDown(event, 'message')"></textarea>
+                <button id="sendButton" onclick="sendMessage()">Envoyer</button>
+            </div>
+        </div>
+    </body>
+</html>
