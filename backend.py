@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from websockets.asyncio.server import serve, ServerConnection
 import json
-log : list[Package] = []
+log : list[Message] = []
 class ConnectionManager():
     _instance = None
 
@@ -22,7 +22,7 @@ class ConnectionManager():
         client.disconnect()
         del client.connection
         self.connected_clients.remove(client)
-        await asyncio.gather(*(client.send(Package(f"{client.name} vient de se déconnecter", "serveur", "connection")) for other in self.connected_clients))
+        await asyncio.gather(*(other.send(Message(f"{client.name} vient de se déconnecter", "serveur", "connection")) for other in self.connected_clients))
     async def identify(self, identification, connection):
         error = ""
         infos = identification.split("\n")
@@ -32,10 +32,10 @@ class ConnectionManager():
         for client in self.clients:
             if client.name == name:
                 if client in self.connected_clients:
-                    await connection.send(Package("double", "serveur", "identification"))
+                    await connection.send(Message("double", "serveur", "identification"))
                     return 
                 elif client.password != password:
-                    await connection.send(Package("password", "serveur", "identification"))
+                    await connection.send(Message("password", "serveur", "identification"))
                     return
                 else:
                     fclient = client
@@ -44,36 +44,36 @@ class ConnectionManager():
             self.clients.add(fclient)
         fclient.connect(connection)
         self.connected_clients.add(fclient)
-        await fclient.send(Package("ok", "serveur", "identification"))
+        await fclient.send(Message("ok", "serveur", "identification"))
         for other in self.connected_clients:
             if other == fclient:
                     continue
-            await fclient.send(Package(f"{other.name} est connecté", "serveur", "connection"))
+            await fclient.send(Message(f"{other.name} est connecté", "serveur", "connection"))
         print(f"{fclient.name} vient de se connecter")
-        await asyncio.gather(*(fclient.send(package) for package in log))
-        await asyncio.gather(*(client.send(Package(f"{fclient.name} vient de se connecter", "serveur", "connection")) for client in self.connected_clients))
+        await asyncio.gather(*(fclient.send(message) for message in log))
+        await asyncio.gather(*(client.send(Message(f"{fclient.name} vient de se connecter", "serveur", "connection")) for client in self.connected_clients))
         return fclient
 
-class Package():
-    def __init__(self, content : str = "", author : str = "", type : str = ""):
-        self.content = content
+class Message():
+    def __init__(self, payload : str = "", author : str = "", type : str = ""):
+        self.payload = payload
         self.author = author
         self.type = type
     def toJSON(self):
-        return {"content": self.content, "author": self.author, "type": self.type}
+        return {"payload": self.payload, "author": self.author, "type": self.type}
     @staticmethod
     def receive(message : str | bytes):
         data = json.loads(message)
-        return Package(data["content"], data["author"], data["type"])
+        return Message(data["payload"], data["author"], data["type"])
 
 class Client():
     def __init__(self, name, password):
         self.name = name
         self.password = password
         self.connection = None
-    async def send(self, package):
+    async def send(self, message):
         if self.connection:
-            await self.connection.send(package)
+            await self.connection.send(message)
     def connect(self, connection):
         self.connection = connection
     def disconnect(self):
@@ -85,29 +85,30 @@ class Client():
 class Connection():
     def __init__(self, websocket):
         self.websocket = websocket
-    async def send(self, package):
-        await self.websocket.send(json.dumps(package.toJSON()))
+    async def send(self, message):
+        await self.websocket.send(json.dumps(message.toJSON()))
     
 async def echo_handler(websocket : ServerConnection):
     manager = ConnectionManager()
     connection = Connection(websocket)
     client = None
     print(f"Connection opened: {connection.websocket}")
-    await connection.send(Package("PING", "serveur", "ping"))
+    await connection.send(Message("PING", "serveur", "ping"))
     print(f"{connection.websocket} <- PING")
     try:
-        async for package in connection.websocket:
-            package = Package.receive(package)
-            print(f"{connection.websocket} -> {package.content}")
-            if package.type == "identification":
-                client = await manager.identify(package.content, connection)
-            elif package.type == "message":
+        async for message in connection.websocket:
+            message = Message.receive(message)
+            print(f"{connection.websocket} -> {message.payload}")
+            if message.type == "identification":
+                client = await manager.identify(message.payload, connection)
+            elif message.type == "chat":
                 print("New message")
-                log.append(package)
-                await asyncio.gather(*(client.send(package) for client in manager.connected_clients))
+                log.append(message)
+                await asyncio.gather(*(client.send(message) for client in manager.connected_clients))
     finally:
         print(f"Connection closed: {connection.websocket}")
-        await manager.disconnect(client)
+        if client:
+            await manager.disconnect(client)
         
 
 async def main():
