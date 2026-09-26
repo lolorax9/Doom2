@@ -8,30 +8,28 @@ let authenticator = {
 function processIdentification(message) {
     if (message.type == "identification") {
         console.log("Identification started");
-        if (message.payload == "ok") {
-            console.log("connected");
-            const popup = document.getElementById("myPopup");
-            popup.close();
-            manager.removeProcess(identificationProcess);
-            manager.addProcess(chatProcess);
-        }
-        else if (message.payload == "password") {
-            console.log("not ok");
-            let passwordField = document.getElementById("userPassword");
-            passwordField.value = '';
-        }
+        console.log("connected");
+        const popup = document.getElementById("myPopup");
+        popup.close();
+        manager.removeProcess(identificationProcess);
+        manager.addProcess(chatProcess);
+    }else if (message.type == "error") {
+        console.log("not ok");
+        let passwordField = document.getElementById("userPassword");
+        passwordField.value = '';
     }
 }
+
 function processChat(message) {
     if (message.type == "chat" || message.type == "connection") {
         console.log("Show");
-        showMessage(message);
-        console.log(`Message received '${message.payload}'`);
-    }
+        showChat(message.payload);
+        console.log(`Message received '${message.payload.chat}'`);
+    }      
 }
 function processPingPong(message) {
     if (message.type == "ping") {
-        let pong = new Message("Pong", "", "ping");
+        let pong = new Message("ping", "Pong");
         pong.send();
     }
 }
@@ -66,14 +64,13 @@ const chatProcess = new Process(processChat);
 const pingpongProcess = new Process(processPingPong);
 const manager = new ProcessManager();
 class Message {
-    constructor(payload, author, type) {
+    constructor(type, payload) {
         this.payload = payload;
-        this.author = author;
         this.type = type;
     }
     static receive(data) {
         let message = JSON.parse(data);
-        return new Message(message.payload, message.author, message.type);
+        return new Message(message.type, message.payload);
     }
     send() {
         websocket.send(JSON.stringify(this));
@@ -91,9 +88,9 @@ function initSocket() {
     manager.addProcess(pingpongProcess);
     manager.addProcess(identificationProcess);
 }
-function showMessage(message) {
+function showChat(payload) {
     const newMessage = document.createElement("p");
-    let line = `[${message.author}]: ${message.payload}`;
+    let line = `[${payload.author}]: ${payload.chat}`;
     newMessage.textContent = line;
     if (chat) {
         chat.appendChild(newMessage);
@@ -102,15 +99,12 @@ function showMessage(message) {
 }
 function sendMessage() {
     let textarea = document.getElementById("messageInput");
-    if (!textarea) {
-        throw new Error("WTF");
-    }
-    let payload = textarea.value;
-    if (payload == '') {
+    let chat = textarea.value;
+    if (chat == '') {
         return;
     }
     textarea.value = '';
-    let message = new Message(payload, authenticator.name, "chat");
+    let message = new Message("chat", {author: authenticator.name, chat: chat});
     message.send();
 }
 function sendIdentification() {
@@ -118,7 +112,7 @@ function sendIdentification() {
     let password = document.getElementById("userPassword").value;
     authenticator.name = name;
     authenticator.password = password;
-    let authentification = new Message(`${authenticator.name}\n${authenticator.password}`, authenticator.name, "identification");
+    let authentification = new Message("identification", {name : authenticator.name, password: authenticator.password});
     authentification.send();
     manager.addProcess(identificationProcess);
 }

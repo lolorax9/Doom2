@@ -22,20 +22,18 @@ class ConnectionManager():
         client.disconnect()
         del client.connection
         self.connected_clients.remove(client)
-        await asyncio.gather(*(other.send(Message(f"{client.name} vient de se déconnecter", "serveur", "connection")) for other in self.connected_clients))
-    async def identify(self, identification, connection):
-        error = ""
-        infos = identification.split("\n")
-        name = infos[0].strip()
-        password = infos[1].strip()
+        await asyncio.gather(*(other.send(Message("connection", {"author" : "serveur", "chat" : f"{client.name} vient de se déconnecter"})) for other in self.connected_clients))
+    async def identify(self, payload, connection):
+        name = payload["name"].strip()
+        password = payload["password"].strip()
         fclient = None
         for client in self.clients:
             if client.name == name:
                 if client in self.connected_clients:
-                    await connection.send(Message("double", "serveur", "identification"))
+                    await connection.send(Message("error", {"exception" : "double"}))
                     return 
                 elif client.password != password:
-                    await connection.send(Message("password", "serveur", "identification"))
+                    await connection.send(Message( "error", {"exception" : "password"}))
                     return
                 else:
                     fclient = client
@@ -44,27 +42,26 @@ class ConnectionManager():
             self.clients.add(fclient)
         fclient.connect(connection)
         self.connected_clients.add(fclient)
-        await fclient.send(Message("ok", "serveur", "identification"))
+        await fclient.send(Message("identification", {"name" : fclient.name, "password" : fclient.password}))
         for other in self.connected_clients:
             if other == fclient:
                     continue
-            await fclient.send(Message(f"{other.name} est connecté", "serveur", "connection"))
+            await fclient.send(Message("connection", {"author": "serveur", "chat": f"{other.name} est connecté"}))
         print(f"{fclient.name} vient de se connecter")
         await asyncio.gather(*(fclient.send(message) for message in log))
-        await asyncio.gather(*(client.send(Message(f"{fclient.name} vient de se connecter", "serveur", "connection")) for client in self.connected_clients))
+        await asyncio.gather(*(client.send(Message("connection", {"author":"serveur", "chat" :f"{fclient.name} vient de se connecter"})) for client in self.connected_clients))
         return fclient
 
 class Message():
-    def __init__(self, payload : str = "", author : str = "", type : str = ""):
+    def __init__(self,type : str = "", payload : dict | str = {}):
         self.payload = payload
-        self.author = author
         self.type = type
     def toJSON(self):
-        return {"payload": self.payload, "author": self.author, "type": self.type}
+        return {"type": self.type, "payload": self.payload}
     @staticmethod
     def receive(message : str | bytes):
         data = json.loads(message)
-        return Message(data["payload"], data["author"], data["type"])
+        return Message(data["type"], data["payload"])
 
 class Client():
     def __init__(self, name, password):
@@ -76,6 +73,7 @@ class Client():
             await self.connection.send(message)
     def connect(self, connection):
         self.connection = connection
+        self.connection.client = self
     def disconnect(self):
         self.connection = None
         
@@ -85,6 +83,7 @@ class Client():
 class Connection():
     def __init__(self, websocket):
         self.websocket = websocket
+        self.client = None
     async def send(self, message):
         await self.websocket.send(json.dumps(message.toJSON()))
     
@@ -93,7 +92,7 @@ async def echo_handler(websocket : ServerConnection):
     connection = Connection(websocket)
     client = None
     print(f"Connection opened: {connection.websocket}")
-    await connection.send(Message("PING", "serveur", "ping"))
+    await connection.send(Message("ping", "PING"))
     print(f"{connection.websocket} <- PING")
     try:
         async for message in connection.websocket:
